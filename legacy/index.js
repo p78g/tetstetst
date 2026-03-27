@@ -139,7 +139,7 @@ async function askForCheats(bots, mode) {
                 const chars = ['\\u2f9f', '\\u4fff', '\\u4f52', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u4FF1', '\\u4FF2'];
                 const unicodeChars = chars.map(c => eval(`"${c}"`));
                 const longText = new Array(3000000).fill().map(() => unicodeChars[Math.floor(Math.random() * unicodeChars.length)]).join('');
-                bot.sendUpdate(`c/${bot.name}/b`, longText);
+                return bot.sendUpdate(`c/${bot.name}/b`, longText);
             },
             compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
         },
@@ -149,7 +149,7 @@ async function askForCheats(bots, mode) {
             inputs: [{ name: 'text', prompt: 'Enter text to repeat: ' }],
             action: (bot, { text }) => {
                 const repeated = Array(500).fill(text).join(' ');
-                bot.sendUpdate(`c/${bot.name}/b`, repeated);
+                return bot.sendUpdate(`c/${bot.name}/b`, repeated);
             },
             compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
         },
@@ -158,7 +158,7 @@ async function askForCheats(bots, mode) {
             description: 'Fills host screen with text (Crypto Hack only)',
             action: (bot) => {
                 const value = `9999999999999999999999999999999999999999999999${new Array(999).fill('\u0e47'.repeat(70)).join(' ')}`;
-                bot.sendUpdate(`c/${bot.name}/cr`, value);
+                return bot.sendUpdate(`c/${bot.name}/cr`, value);
             },
             compatible: ['Crypto Hack']
         },
@@ -175,7 +175,7 @@ async function askForCheats(bots, mode) {
                 const chars = ['\\u2f9f', '\\u4fff', '\\u4f52', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u4FF1', '\\u4FF2'];
                 const unicodeChars = chars.map(c => eval(`"${c}"`));
                 const longText = new Array(3000000).fill().map(() => unicodeChars[Math.floor(Math.random() * unicodeChars.length)]).join('');
-                bot.sendUpdate(`c/${bot.name}/p`, longText);
+                return bot.sendUpdate(`c/${bot.name}/p`, longText);
             },
             compatible: ['Crypto Hack']
         }
@@ -232,7 +232,7 @@ async function askForCheats(bots, mode) {
     }
     const selectedBot = bots[botIndex];
 
-    // Execute cheat
+    // Execute cheat (now awaited)
     console.log(yellow(`\nExecuting ${selectedCheat.name} on ${selectedBot.name}...`));
     try {
         await selectedCheat.action(selectedBot, params);
@@ -240,6 +240,10 @@ async function askForCheats(bots, mode) {
     } catch (err) {
         console.log(red(`Cheat execution failed: ${err.message}`));
     }
+
+    // Wait a moment to ensure the message is fully processed
+    console.log(yellow('Waiting 2 seconds for server to process...'));
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Close all bot WebSockets
     for (const bot of bots) {
