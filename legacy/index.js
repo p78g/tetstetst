@@ -105,6 +105,11 @@ for (let i = 1; i <= config.amount; i++) {
 }
 
 async function askForCheats(bots, mode) {
+    if (bots.length === 0) {
+        console.log(red('No bots successfully joined. Exiting.'));
+        process.exit(1);
+    }
+
     console.log(yellow('\n--- Cheat Execution Menu ---'));
     const useCheats = (await question('Do you want to execute a cheat using one of the bots? (Y/N): ')).toLowerCase();
     if (useCheats !== 'y' && useCheats !== 'yes') {
@@ -194,8 +199,11 @@ async function askForCheats(bots, mode) {
     let cheatIndex;
     while (true) {
         const ans = await question('Select a cheat (number): ');
-        cheatIndex = parseInt(ans) - 1;
-        if (cheatIndex >= 0 && cheatIndex < availableCheats.length) break;
+        const num = parseInt(ans.trim(), 10);
+        if (!isNaN(num) && num >= 1 && num <= availableCheats.length) {
+            cheatIndex = num - 1;
+            break;
+        }
         console.log(red('Invalid number. Try again.'));
     }
     const selectedCheat = availableCheats[cheatIndex];
@@ -215,8 +223,11 @@ async function askForCheats(bots, mode) {
     let botIndex;
     while (true) {
         const ans = await question('Select a bot (number): ');
-        botIndex = parseInt(ans) - 1;
-        if (botIndex >= 0 && botIndex < bots.length) break;
+        const num = parseInt(ans.trim(), 10);
+        if (!isNaN(num) && num >= 1 && num <= bots.length) {
+            botIndex = num - 1;
+            break;
+        }
         console.log(red('Invalid bot number. Try again.'));
     }
     const selectedBot = bots[botIndex];
