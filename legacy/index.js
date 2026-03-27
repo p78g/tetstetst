@@ -96,12 +96,21 @@ for (let i = 1; i <= config.amount; i++) {
 
         if (success + fail == config.amount) {
             console.log(green(`${success}/${config.amount} bots joined successfully!`));
-            // After all bots joined, ask about cheats
-            askForCheats(bots, mode);
+            // After all bots joined, ask to start the game
+            waitForGameStart(bots, mode);
         }
     });
 
     if (!process.env.PROXY) await new Promise((r) => setTimeout(r, 300));
+}
+
+async function waitForGameStart(bots, mode) {
+    console.log(yellow('\n--- All bots are now in the lobby ---'));
+    console.log(yellow('Please start the game on the host (click "Start Game" or equivalent).'));
+    await question('Once the game has started, press Enter to continue to cheat selection...');
+
+    // Now proceed to cheat selection
+    askForCheats(bots, mode);
 }
 
 async function askForCheats(bots, mode) {
