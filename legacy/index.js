@@ -2,6 +2,19 @@ import enquirer from 'enquirer';
 import { bold, green, orange, purple, red, yellow } from '../common/color.js';
 import cookieV2 from '../common/cookieV2.js';
 import join from './join.js';
+import readline from 'readline';
+
+// Helper to get user input
+function question(query) {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+    return new Promise(resolve => rl.question(query, ans => {
+        rl.close();
+        resolve(ans);
+    }));
+}
 
 console.log(bold(yellow('BlooketFlooder Pro')));
 
@@ -98,14 +111,8 @@ for (let i = 1; i <= config.amount; i++) {
 
 async function askForCheats(bots, mode) {
     console.log(yellow('\n--- Entering cheat selection ---'));
-    const { useCheats } = await enquirer.prompt({
-        type: 'confirm',
-        name: 'useCheats',
-        message: 'Do you want to execute a cheat using one of the bots?',
-        initial: false
-    });
-
-    if (!useCheats) {
+    const useCheats = (await question('Do you want to execute a cheat using one of the bots? (Y/N): ')).toLowerCase();
+    if (useCheats !== 'y' && useCheats !== 'yes') {
         console.log(yellow('No cheats selected. Exiting.'));
         for (const bot of bots) bot.ws.close();
         process.exit(0);
@@ -114,18 +121,21 @@ async function askForCheats(bots, mode) {
     // Define cheats and their compatibility
     const cheats = [
         {
+            id: 1,
             name: 'Freeze Leaderboard',
             description: 'Prevents the host leaderboard from updating',
             action: (bot) => bot.sendUpdate(`c/${bot.name}/tat/Freeze`, 'freeze'),
             compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
         },
         {
+            id: 2,
             name: 'Crash Game',
             description: 'Crashes the host\'s game',
             action: (bot) => bot.sendUpdate(`c/${bot.name}/b/toString`, 'Crashed'),
             compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
         },
         {
+            id: 3,
             name: 'Freeze Host',
             description: 'Sends extremely long blook name to freeze host',
             action: (bot) => {
@@ -137,9 +147,10 @@ async function askForCheats(bots, mode) {
             compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
         },
         {
+            id: 4,
             name: 'Set Blook Ad Text',
             description: 'Sets your blook to repeated text',
-            inputs: [{ type: 'input', name: 'text', message: 'Enter text to repeat:' }],
+            inputs: [{ name: 'text', prompt: 'Enter text to repeat: ' }],
             action: (bot, { text }) => {
                 const repeated = Array(500).fill(text).join(' ');
                 bot.sendUpdate(`c/${bot.name}/b`, repeated);
@@ -147,6 +158,7 @@ async function askForCheats(bots, mode) {
             compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
         },
         {
+            id: 5,
             name: 'Set Host Screen Green',
             description: 'Fills host screen with text (Crypto Hack only)',
             action: (bot) => {
@@ -156,12 +168,14 @@ async function askForCheats(bots, mode) {
             compatible: ['Crypto Hack']
         },
         {
+            id: 6,
             name: 'Crash Password',
             description: 'Crashes players who try to hack you (Crypto Hack only)',
             action: (bot) => bot.sendUpdate(`c/${bot.name}/p/toString`, 'crash'),
             compatible: ['Crypto Hack']
         },
         {
+            id: 7,
             name: 'Freeze Password',
             description: 'Freezes players who try to hack you (Crypto Hack only)',
             action: (bot) => {
@@ -182,41 +196,42 @@ async function askForCheats(bots, mode) {
         process.exit(0);
     }
 
-    // Show cheat list
+    // Show cheat list with numbers
     console.log(yellow('\nAvailable cheats:'));
-    for (let i = 0; i < availableCheats.length; i++) {
-        const c = availableCheats[i];
-        console.log(`${i + 1}. ${c.name} - ${c.description}`);
+    for (const c of availableCheats) {
+        console.log(`${c.id}. ${c.name} - ${c.description}`);
     }
 
-    const { cheatIndex } = await enquirer.prompt({
-        type: 'number',
-        name: 'cheatIndex',
-        message: 'Select a cheat (number)',
-        validate: (val) => val >= 1 && val <= availableCheats.length ? true : 'Invalid number'
-    });
+    // Select cheat by number
+    let cheatId;
+    while (true) {
+        const ans = await question('Select a cheat (number): ');
+        cheatId = parseInt(ans);
+        if (availableCheats.find(c => c.id === cheatId)) break;
+        console.log(red('Invalid number. Try again.'));
+    }
+    const selectedCheat = availableCheats.find(c => c.id === cheatId);
 
-    const selectedCheat = availableCheats[cheatIndex - 1];
-
-    // Get any additional inputs
+    // Collect any required parameters
     let params = {};
     if (selectedCheat.inputs) {
-        const inputPrompts = selectedCheat.inputs.map(inp => ({ ...inp, name: inp.name }));
-        const inputs = await enquirer.prompt(inputPrompts);
-        params = inputs;
+        for (const inp of selectedCheat.inputs) {
+            const val = await question(inp.prompt);
+            params[inp.name] = val;
+        }
     }
 
     // Choose bot
     console.log(yellow('\nBots:'));
     bots.forEach((bot, idx) => console.log(`${idx + 1}. ${bot.name}`));
-    const { botIndex } = await enquirer.prompt({
-        type: 'number',
-        name: 'botIndex',
-        message: 'Select a bot (number)',
-        validate: (val) => val >= 1 && val <= bots.length ? true : 'Invalid number'
-    });
-
-    const selectedBot = bots[botIndex - 1];
+    let botIndex;
+    while (true) {
+        const ans = await question('Select a bot (number): ');
+        botIndex = parseInt(ans) - 1;
+        if (botIndex >= 0 && botIndex < bots.length) break;
+        console.log(red('Invalid bot number. Try again.'));
+    }
+    const selectedBot = bots[botIndex];
 
     // Execute cheat
     console.log(yellow(`\nExecuting ${selectedCheat.name} on ${selectedBot.name}...`));
@@ -227,7 +242,7 @@ async function askForCheats(bots, mode) {
         console.log(red(`Cheat execution failed: ${err.message}`));
     }
 
-    // Close all bot WebSockets gracefully
+    // Close all bot WebSockets
     for (const bot of bots) {
         bot.ws.close();
     }
