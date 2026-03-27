@@ -35,34 +35,50 @@ const isDecember = new Date().getMonth() === 11;
 const unrewritten = [isOctober ? 'Candy Quest' : 'Gold Quest', 'Crypto Hack', 'Fishing Frenzy'];
 if (isDecember) unrewritten.push('Santa\'s Workshop');
 
-const isUsingLegacy = await enquirer.prompt({
-    type: 'select',
-    name: 'is',
-    message: `Is your gamemode one of ${unrewritten.join(', ')}?`,
-    choices: ['yes', 'no']
-});
+try {
+    const isUsingLegacy = await enquirer.prompt({
+        type: 'select',
+        name: 'is',
+        message: `Is your gamemode one of ${unrewritten.join(', ')}?`,
+        choices: ['yes', 'no']
+    });
 
-if (isUsingLegacy.is.startsWith('y')) {
-    // continue with legacy flow
-} else if (isUsingLegacy.is.startsWith('n')) {
-    console.log('Beta mode not implemented in this file.');
-    process.exit(0);
-} else {
-    console.log('idrk what you just put so the program has quit run it again and type yes or no next time');
+    if (isUsingLegacy.is.startsWith('y')) {
+        // continue with legacy flow
+    } else if (isUsingLegacy.is.startsWith('n')) {
+        console.log('Beta mode not implemented in this file.');
+        process.exit(0);
+    } else {
+        console.log('idrk what you just put so the program has quit run it again and type yes or no next time');
+        process.exit(1);
+    }
+} catch (err) {
+    console.error(red('Error during gamemode selection:'), err);
     process.exit(1);
 }
 
-const config = await enquirer.prompt([
-    { type: 'input', name: 'pin', message: 'Game Pin' },
-    { type: 'input', name: 'name', message: 'Bot Name' },
-    { type: 'input', name: 'amount', message: 'Bot Amount' }
-]);
+let config;
+try {
+    config = await enquirer.prompt([
+        { type: 'input', name: 'pin', message: 'Game Pin' },
+        { type: 'input', name: 'name', message: 'Bot Name' },
+        { type: 'input', name: 'amount', message: 'Bot Amount' }
+    ]);
+} catch (err) {
+    console.error(red('Error reading configuration:'), err);
+    process.exit(1);
+}
 
 console.log(yellow('\nverifying game pin...'));
 
-const { redirectUrl } = await cookieV2('https://play.blooket.com/play?id=' + config.pin, 'legacy1');
-if (!redirectUrl) {
+let redirectUrl;
+try {
+    const result = await cookieV2('https://play.blooket.com/play?id=' + config.pin, 'legacy1');
+    redirectUrl = result.redirectUrl;
+    if (!redirectUrl) throw new Error('No redirectUrl from cookieV2');
+} catch (err) {
     console.log(red('Failed to verify game pin. Open an issue on Github if you believe this is an error.'));
+    console.error(err);
     process.exit(1);
 }
 
@@ -86,31 +102,37 @@ let fail = 0;
 const bots = [];
 
 for (let i = 1; i <= config.amount; i++) {
-    join(redirectUrl, config.pin, config.name + i, (result, botObj) => {
+    const botName = config.name + i;
+    console.log(`Joining bot ${botName}...`);
+    join(redirectUrl, config.pin, botName, (result, botObj) => {
         if (result == 2) {
             success++;
             bots.push(botObj);
+            console.log(green(`✅ ${botName} joined successfully (${success}/${config.amount})`));
         } else {
             fail++;
+            console.log(red(`❌ ${botName} failed to join (${fail} failures)`));
         }
 
         if (success + fail == config.amount) {
-            console.log(green(`${success}/${config.amount} bots joined successfully!`));
+            console.log(green(`\n${success}/${config.amount} bots joined successfully!`));
             // After all bots joined, ask to start the game
             waitForGameStart(bots, mode);
         }
     });
 
+    // If no proxy, wait 300ms between joins
     if (!process.env.PROXY) await new Promise((r) => setTimeout(r, 300));
 }
 
 async function waitForGameStart(bots, mode) {
     console.log(yellow('\n--- All bots are now in the lobby ---'));
     console.log(yellow('Please start the game on the host (click "Start Game" or equivalent).'));
-    await question('Once the game has started, press Enter to continue to cheat selection...');
+    console.log(yellow('Once the game has started, press Enter to continue to cheat selection.'));
+    await question('Press Enter when the game is running...');
 
     // Now proceed to cheat selection
-    askForCheats(bots, mode);
+    await askForCheats(bots, mode);
 }
 
 async function askForCheats(bots, mode) {
@@ -258,5 +280,6 @@ async function askForCheats(bots, mode) {
     for (const bot of bots) {
         bot.ws.close();
     }
+    console.log(yellow('All connections closed. Exiting.'));
     process.exit(0);
 }
