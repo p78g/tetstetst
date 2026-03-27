@@ -83,29 +83,36 @@ export default async (redirectUrl, id, name, cb) => {
         let wasProperClose = false;
         let requestId = 5; // start after the initial setup
 
-        // Helper to send a database update
-        const sendUpdate = (path, value, callback) => {
+        // Helper to send a database update and wait for confirmation
+        const sendUpdate = (path, value, timeout = 5000) => {
             const r = ++requestId;
-            const msg = JSON.stringify({
-                t: 'd',
-                d: {
-                    r,
-                    a: 'p',
-                    b: { p: path, d: value }
-                }
-            });
-            ws.send(msg);
-            if (callback) {
+            return new Promise((resolve, reject) => {
+                const msg = JSON.stringify({
+                    t: 'd',
+                    d: {
+                        r,
+                        a: 'p',
+                        b: { p: path, d: value }
+                    }
+                });
+                ws.send(msg);
+
                 const handler = (event) => {
                     let data;
                     try { data = JSON.parse(event.data); } catch { return; }
                     if (data.d?.r === r) {
                         ws.removeEventListener('message', handler);
-                        callback(null, data);
+                        clearTimeout(timer);
+                        resolve(data);
                     }
                 };
                 ws.addEventListener('message', handler);
-            }
+
+                const timer = setTimeout(() => {
+                    ws.removeEventListener('message', handler);
+                    reject(new Error(`Timeout waiting for ack on ${path}`));
+                }, timeout);
+            });
         };
 
         ws.onmessage = (msg) => {
