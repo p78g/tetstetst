@@ -4,7 +4,6 @@ import cookieV2 from '../common/cookieV2.js';
 import join from './join.js';
 import readline from 'readline';
 
-// Helper to get user input
 function question(query) {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -44,7 +43,7 @@ try {
     });
 
     if (isUsingLegacy.is.startsWith('y')) {
-        // continue with legacy flow
+        // continue
     } else if (isUsingLegacy.is.startsWith('n')) {
         console.log('Beta mode not implemented in this file.');
         process.exit(0);
@@ -61,7 +60,15 @@ try {
 
     console.log(yellow('\nverifying game pin...'));
 
-    const { redirectUrl } = await cookieV2('https://play.blooket.com/play?id=' + config.pin, 'legacy1');
+    let redirectUrl;
+    try {
+        const result = await cookieV2('https://play.blooket.com/play?id=' + config.pin, 'legacy1');
+        redirectUrl = result.redirectUrl;
+    } catch (err) {
+        console.error(red('CookieV2 error:'), err);
+        process.exit(1);
+    }
+
     if (!redirectUrl) {
         console.log(red('Failed to verify game pin. Open an issue on Github if you believe this is an error.'));
         process.exit(1);
@@ -128,7 +135,6 @@ try {
                 continue;
             }
 
-            // Define cheats (only include those that have been tested and work, plus diagnostic ones)
             const cheats = [
                 {
                     name: 'Freeze Leaderboard',
@@ -214,20 +220,17 @@ try {
                 }
             ];
 
-            // Filter cheats compatible with current mode
             const availableCheats = cheats.filter(c => c.compatible.includes(mode));
             if (availableCheats.length === 0) {
                 console.log(red(`No cheats available for mode: ${mode}`));
                 return;
             }
 
-            // Show cheat list with numbers
             console.log(yellow('\nAvailable cheats:'));
             for (let i = 0; i < availableCheats.length; i++) {
                 console.log(`${i + 1}. ${availableCheats[i].name} - ${availableCheats[i].description}`);
             }
 
-            // Select cheat by number
             let cheatIndex;
             while (true) {
                 const ans = await question('Select a cheat (number): ');
@@ -240,7 +243,6 @@ try {
             }
             const selectedCheat = availableCheats[cheatIndex];
 
-            // Collect any required parameters
             let params = {};
             if (selectedCheat.inputs) {
                 for (const inp of selectedCheat.inputs) {
@@ -249,7 +251,6 @@ try {
                 }
             }
 
-            // Choose bot
             console.log(yellow('\nBots:'));
             bots.forEach((bot, idx) => console.log(`${idx + 1}. ${bot.name}`));
             let botIndex;
@@ -264,7 +265,6 @@ try {
             }
             const selectedBot = bots[botIndex];
 
-            // Execute cheat
             console.log(yellow(`\nExecuting ${selectedCheat.name} on ${selectedBot.name}...`));
             try {
                 await selectedCheat.action(selectedBot, params);
@@ -274,7 +274,6 @@ try {
                 console.error(err);
             }
 
-            // Wait a moment before returning to menu
             console.log(yellow('Waiting 2 seconds before returning to menu...'));
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
