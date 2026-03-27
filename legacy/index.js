@@ -72,17 +72,23 @@ let success = 0;
 let fail = 0;
 const bots = [];
 
+console.log(yellow('Joining bots...'));
+
 for (let i = 1; i <= config.amount; i++) {
-    join(redirectUrl, config.pin, config.name + i, (result, botObj) => {
+    const botName = config.name + i;
+    console.log(`Spawning bot ${botName}`);
+    join(redirectUrl, config.pin, botName, (result, botObj) => {
         if (result === 2) {
             success++;
             bots.push(botObj);
+            console.log(green(`✅ ${botName} joined (${success}/${config.amount})`));
         } else {
             fail++;
+            console.log(red(`❌ ${botName} failed to join`));
         }
 
         if (success + fail === config.amount) {
-            console.log(green(`${success}/${config.amount} bots joined successfully!`));
+            console.log(green(`\n${success}/${config.amount} bots joined successfully!`));
             askForCheats(bots, mode);
         }
     });
@@ -91,6 +97,7 @@ for (let i = 1; i <= config.amount; i++) {
 }
 
 async function askForCheats(bots, mode) {
+    console.log(yellow('\n--- Entering cheat selection ---'));
     const { useCheats } = await enquirer.prompt({
         type: 'confirm',
         name: 'useCheats',
