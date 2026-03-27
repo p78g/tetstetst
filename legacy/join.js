@@ -1,8 +1,6 @@
 import createClient from '../common/createClient.js';
 import cookieV2 from '../common/cookieV2.js';
-
 import BLOOK_LIST from './blooks.js';
-
 import { green, red } from '../common/color.js';
 
 export default async (redirectUrl, id, name, cb) => {
@@ -51,7 +49,6 @@ export default async (redirectUrl, id, name, cb) => {
                 } catch {
                     if (data.includes('Just a moment')) console.error('cloudflare is blocking us...dangit. open an issue on github.');
                     else console.error('if this happens on all bots, open an issue on github with the code "invalid json"', data);
-
                     resolve({});
                 }
             });
@@ -60,7 +57,7 @@ export default async (redirectUrl, id, name, cb) => {
         });
 
         if (!joinResult.fbToken || !joinResult.fbShardURL) {
-            console.log(red(`${name} faled to join w/ reason ${joinResult.msg || 'unknown'}`));
+            console.log(red(`${name} failed to join w/ reason ${joinResult.msg || 'unknown'}`));
             return cb(1);
         }
 
@@ -75,52 +72,77 @@ export default async (redirectUrl, id, name, cb) => {
 
         const selectedBlook = BLOOK_LIST[BLOOK_LIST.length * Math.random() | 0];
 
-        const shardWs = joinResult.fbShardURL.replace('https', 'wss') + '.ws?v=5&p=1:741533559105:web:b8cbb10e6123f2913519c0'; // fb "appId"
-        const testWs = new WebSocket(shardWs);
+        const shardWs = joinResult.fbShardURL.replace('https', 'wss') + '.ws?v=5&p=1:741533559105:web:b8cbb10e6123f2913519c0';
+        const ws = new WebSocket(shardWs);
 
-        testWs.onerror = (err) => {
+        ws.onerror = (err) => {
             console.error(red(`${name} failed to join (websocket error)`), err);
             cb(1);
-        }
+        };
 
         let wasProperClose = false;
+        let requestId = 5; // start after the initial setup
 
-        testWs.onmessage = (msg) => {
+        // Helper to send a database update
+        const sendUpdate = (path, value, callback) => {
+            const r = ++requestId;
+            const msg = JSON.stringify({
+                t: 'd',
+                d: {
+                    r,
+                    a: 'p',
+                    b: { p: path, d: value }
+                }
+            });
+            ws.send(msg);
+            if (callback) {
+                const handler = (event) => {
+                    let data;
+                    try { data = JSON.parse(event.data); } catch { return; }
+                    if (data.d?.r === r) {
+                        ws.removeEventListener('message', handler);
+                        callback(null, data);
+                    }
+                };
+                ws.addEventListener('message', handler);
+            }
+        };
+
+        ws.onmessage = (msg) => {
             let json;
-            try {
-                json = JSON.parse(msg.data);
-                if (process.env.DEBUG) console.log('received message:', json);
-            } catch { return }
+            try { json = JSON.parse(msg.data); } catch { return; }
+            if (process.env.DEBUG) console.log('received message:', json);
 
             if (json.d?.d?.h?.includes?.('firebaseio.com')) {
                 if (process.env.DEBUG) console.log('[1] sending fbtoken');
-                testWs.send(JSON.stringify({ t: 'd', d: { r: 1, a: 's', b: { c: { 'sdk.js.10-14-1': 1 } } } }));
-                testWs.send(JSON.stringify({ t: 'd', d: { r: 2, a: 'auth', b: { cred: signInRes.idToken } } }));
-                testWs.send(JSON.stringify({ t: 'd', d: { r: 3, a: 'q', b: { p: `/${id}`, h: '' } } }));
+                ws.send(JSON.stringify({ t: 'd', d: { r: 1, a: 's', b: { c: { 'sdk.js.10-14-1': 1 } } } }));
+                ws.send(JSON.stringify({ t: 'd', d: { r: 2, a: 'auth', b: { cred: signInRes.idToken } } }));
+                ws.send(JSON.stringify({ t: 'd', d: { r: 3, a: 'q', b: { p: `/${id}`, h: '' } } }));
             }
 
             if (json.d?.b?.d?.stg === 'join') {
                 if (process.env.DEBUG) console.log('[2] setting blook');
-                testWs.send(JSON.stringify({ t: 'd', d: { r: 4, a: 'n', b: { p: `/${id}` } } }));
-                testWs.send(JSON.stringify({ t: 'd', d: { r: 5, a: 'p', b: { p: `/${id}/c/${name}`, d: { b: selectedBlook } } } }));
+                ws.send(JSON.stringify({ t: 'd', d: { r: 4, a: 'n', b: { p: `/${id}` } } }));
+                ws.send(JSON.stringify({ t: 'd', d: { r: 5, a: 'p', b: { p: `/${id}/c/${name}`, d: { b: selectedBlook } } } }));
             }
 
             if (json.d?.r === 5) {
-                wasProperClose = true;
-                testWs.close();
+                // Successfully joined and set blook
                 console.log(green(`${name} joined the game with blook ${selectedBlook}!`));
-                cb(2);
+                wasProperClose = true;
+                // Pass bot object back to main script
+                cb(2, { ws, name, sendUpdate });
             }
-        }
+        };
 
-        testWs.onclose = (e) => {
-            if (!wasProperClose) {
-                console.error(red(`${name} faled to join (improper close)`), e);
+        ws.onclose = (e) => {
+            if (!wasProperClose && !(e.code === 1000)) {
+                console.error(red(`${name} failed to join (improper close)`), e);
                 cb(1);
             }
-        }
+        };
     } catch (err) {
-        console.log(red(`${name} faled to join (caught error)`), err);
+        console.log(red(`${name} failed to join (caught error)`), err);
         cb(1);
-    };
+    }
 };
