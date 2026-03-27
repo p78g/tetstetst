@@ -1,11 +1,12 @@
 import createClient from '../common/createClient.js';
 import cookieV2 from '../common/cookieV2.js';
 import BLOOK_LIST from './blooks.js';
-import { green, red } from '../common/color.js';
+import { green, red, yellow } from '../common/color.js';
 
 export default async (redirectUrl, id, name, cb) => {
     try {
         const { cookies } = await cookieV2(redirectUrl, 'legacy2');
+        console.log(yellow(`[${name}] Got cookies`));
 
         const joinUrl = new URL('https://fb.blooket.com/c/firebase/join');
         const joinClient = await createClient(joinUrl.origin);
@@ -61,6 +62,8 @@ export default async (redirectUrl, id, name, cb) => {
             return cb(1);
         }
 
+        console.log(yellow(`[${name}] Got fbToken and shard URL`));
+
         const signInReq = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=AIzaSyCA-cTOnX19f6LFnDVVsHXya3k6ByP_MnU', {
             method: 'POST',
             body: JSON.stringify({ token: joinResult.fbToken, returnSecureToken: true }),
@@ -69,6 +72,7 @@ export default async (redirectUrl, id, name, cb) => {
         });
 
         const signInRes = await signInReq.json();
+        console.log(yellow(`[${name}] Signed in with Firebase`));
 
         const selectedBlook = BLOOK_LIST[BLOOK_LIST.length * Math.random() | 0];
 
@@ -76,7 +80,7 @@ export default async (redirectUrl, id, name, cb) => {
         const ws = new WebSocket(shardWs);
 
         ws.onerror = (err) => {
-            console.error(red(`${name} failed to join (websocket error)`), err);
+            console.error(red(`${name} websocket error:`), err);
             cb(1);
         };
 
@@ -84,7 +88,7 @@ export default async (redirectUrl, id, name, cb) => {
         let requestId = 5; // start after the initial setup
 
         // Helper to send a database update and wait for confirmation
-        const sendUpdate = (path, value, timeout = 5000) => {
+        const sendUpdate = (path, value, timeout = 10000) => {
             const r = ++requestId;
             return new Promise((resolve, reject) => {
                 const msg = JSON.stringify({
@@ -95,6 +99,7 @@ export default async (redirectUrl, id, name, cb) => {
                         b: { p: path, d: value }
                     }
                 });
+                console.log(yellow(`[${name}] Sending update: ${path} = ${JSON.stringify(value).substring(0, 100)}...`));
                 ws.send(msg);
 
                 const handler = (event) => {
@@ -103,6 +108,7 @@ export default async (redirectUrl, id, name, cb) => {
                     if (data.d?.r === r) {
                         ws.removeEventListener('message', handler);
                         clearTimeout(timer);
+                        console.log(green(`[${name}] Update confirmed for ${path}`));
                         resolve(data);
                     }
                 };
@@ -110,6 +116,7 @@ export default async (redirectUrl, id, name, cb) => {
 
                 const timer = setTimeout(() => {
                     ws.removeEventListener('message', handler);
+                    console.error(red(`[${name}] Timeout waiting for ack on ${path}`));
                     reject(new Error(`Timeout waiting for ack on ${path}`));
                 }, timeout);
             });
@@ -118,17 +125,17 @@ export default async (redirectUrl, id, name, cb) => {
         ws.onmessage = (msg) => {
             let json;
             try { json = JSON.parse(msg.data); } catch { return; }
-            if (process.env.DEBUG) console.log('received message:', json);
+            if (process.env.DEBUG) console.log(`[${name}] received:`, json);
 
             if (json.d?.d?.h?.includes?.('firebaseio.com')) {
-                if (process.env.DEBUG) console.log('[1] sending fbtoken');
+                if (process.env.DEBUG) console.log(`[${name}] [1] sending fbtoken`);
                 ws.send(JSON.stringify({ t: 'd', d: { r: 1, a: 's', b: { c: { 'sdk.js.10-14-1': 1 } } } }));
                 ws.send(JSON.stringify({ t: 'd', d: { r: 2, a: 'auth', b: { cred: signInRes.idToken } } }));
                 ws.send(JSON.stringify({ t: 'd', d: { r: 3, a: 'q', b: { p: `/${id}`, h: '' } } }));
             }
 
             if (json.d?.b?.d?.stg === 'join') {
-                if (process.env.DEBUG) console.log('[2] setting blook');
+                if (process.env.DEBUG) console.log(`[${name}] [2] setting blook`);
                 ws.send(JSON.stringify({ t: 'd', d: { r: 4, a: 'n', b: { p: `/${id}` } } }));
                 ws.send(JSON.stringify({ t: 'd', d: { r: 5, a: 'p', b: { p: `/${id}/c/${name}`, d: { b: selectedBlook } } } }));
             }
@@ -144,12 +151,14 @@ export default async (redirectUrl, id, name, cb) => {
 
         ws.onclose = (e) => {
             if (!wasProperClose && !(e.code === 1000)) {
-                console.error(red(`${name} failed to join (improper close)`), e);
+                console.error(red(`${name} websocket closed unexpectedly: code=${e.code}, reason=${e.reason}`));
                 cb(1);
+            } else {
+                console.log(yellow(`[${name}] WebSocket closed normally`));
             }
         };
     } catch (err) {
-        console.log(red(`${name} failed to join (caught error)`), err);
+        console.error(red(`${name} caught error:`), err);
         cb(1);
     }
 };
